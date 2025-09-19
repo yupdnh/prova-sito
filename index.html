@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <title>Gestione Operazioni Finanziarie</title>
+  <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css">
+  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+  <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    button { margin: 5px; padding: 6px 12px; cursor: pointer; }
+    .summary {
+      margin: 15px 0; padding: 10px; background: #f0f0f0; border-radius: 8px;
+      display: flex; justify-content: space-between; font-weight: bold;
+    }
+    .summary div span { font-weight: bold; }
+    .modal {
+      display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0,0,0,0.5); justify-content: center; align-items: center;
+    }
+    .modal-content {
+      background: white; padding: 20px; border-radius: 10px; width: 350px;
+      display: flex; flex-direction: column; gap: 10px;
+    }
+    .modal-content input, .modal-content select, .modal-content textarea {
+      padding: 6px; font-size: 14px; width: 100%;
+    }
+    tr.selected { background-color: #d0ebff !important; }
+    .filters { margin: 10px 0; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+    .filters input, .filters select, .filters button { padding: 5px; }
+    #panelSummary {
+      margin-top:10px; padding:10px; background:#e0f7fa; border-radius:8px; display:flex; gap:10px; flex-wrap:wrap;
+    }
+    #panelSummary div { flex:1; min-width:220px; padding:10px; border-radius:6px; box-shadow:0 0 5px rgba(0,0,0,0.1); }
+    #panelSummary > div:nth-child(2) { background:#fff3e0; }
+    #panelSummary strong { color:#00796b; }
+    #panelSummary span.value { font-weight:bold; font-size:1.1em; }
+    .notes-cell { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .notes-cell:hover { overflow: visible; white-space: normal; background: #fff; position: absolute; z-index: 100; border: 1px solid #ccc; padding: 5px; }
+    .price-controls { display: flex; gap: 10px; align-items: center; margin-bottom: 10px; }
+    .price-controls input { flex: 1; }
+    .market-price-btn { padding: 5px 10px; background: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer; }
+    .market-price-btn:hover { background: #45a049; }
+    .market-select { padding: 5px; border-radius: 4px; border: 1px solid #ccc; }
+    .loading { display: inline-block; width: 16px; height: 16px; border: 2px solid #f3f3f3; border-top: 2px solid #3498db; border-radius: 50%; animation: spin 1s linear infinite; margin-left: 5px; }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+  <h2>📊 Operazioni Finanziarie</h2>
+
+  <!-- Riepilogo generale -->
+  <div class="summary">
+    <div>Totale BUY: <span id="totalBuy">0.00</span> €</div>
+    <div>Totale SELL: <span id="totalSell">0.00</span> €</div>
+    <div>Saldo: <span id="balance">0.00</span> €</div>
+  </div>
+
+  <div>
+    <button id="importBtn">📂 Importa XML</button>
+    <input type="file" id="fileInput" accept=".xml" style="display:none">
+    <button id="addBtn">➕ Aggiungi</button>
+    <button id="deleteBtn">❌ Elimina</button>
+    <button id="exportBtn">💾 Esporta XML</button>
+  </div>
+
+  <!-- Filtri -->
+  <div class="filters">
+    <label>Titolo: 
+      <input list="symbolsList" id="filterSymbol" placeholder="Seleziona Titolo">
+      <datalist id="symbolsList"></datalist>
+    </label>
+    <label>Tipo:
+      <select id="filterType">
+        <option value="">Tutti</option>
+        <option value="BUY">BUY</option>
+        <option value="SELL">SELL</option>
+      </select>
+    </label>
+    <label>Data da: <input type="date" id="filterDateFrom"></label>
+    <label>Data a: <input type="date" id="filterDateTo"></label>
+    <button id="resetFilters">♻️ Reset Filtri</button>
+  </div>
+
+  <table id="tradesTable" class="display" style="width:100%">
+    <thead>
+      <tr>
+        <th>Titolo</th>
+        <th>Tipo</th>
+        <th>Azioni</th>
+        <th>Prezzo</th>
+        <th>Fee</th>
+        <th>Totale</th>
+        <th>Data</th>
+        <th>Note</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+  <!-- Modal per Aggiunta/Modifica -->
+<div id="modal" class="modal">
+  <div class="modal-content">
+    <h3 id="modalTitle">Nuova Operazione</h3>
+    <input type="text" id="symbol" placeholder="Titolo (es. SNPS)">
+    <select id="type">
+      <option value="BUY">BUY</option>
+      <option value="SELL">SELL</option>
+    </select>
+    <input type="number" step="0.000001" id="shares" placeholder="Azioni">
+    <input type="number" step="0.01" id="price" placeholder="Prezzo">
+    <input type="number" step="0.01" id="fee" placeholder="Fee">
+    <input type="number" step="0.01" id="total" placeholder="Totale" readonly>
+    <!-- input aggiornato per data+ora -->
+    <input type="datetime-local" id="date">
+    <textarea id="notes" placeholder="Note (opzionale)" rows="3"></textarea>
+    <button id="saveBtn">💾 Salva</button>
+    <button id="cancelBtn">❌ Annulla</button>
+  </div>
+</div>
+  <!-- Pannello riepilogo + proiezione -->
+  <div id="panelSummary" style="display:none;">
+    <div>
+      <div><strong>Titolo:</strong> <span id="sumSymbol"></span></div>
+      <div><strong>Acquisti:</strong> <span id="sumBuy"></span></div>
+      <div><strong>Vendite:</strong> <span id="sumSell"></span></div>
+      <div><strong>Saldo Azioni:</strong> <span id="sumDeltaShares"></span></div>
+      <div><strong>Saldo Investimento:</strong> <span id="sumDeltaMoney"></span></div>
+  <div><strong>Prezzo Medio di Carico:</strong> 
+    <span id="sumAvgBuy" class="value" title="Prezzo medio considerando solo gli acquisti (BUY)">0.00 €</span>
+  </div>
+  <div><strong>Prezzo Medio Netto:</strong> 
+    <span id="sumAvgNet" class="value" title="Prezzo medio effettivo delle azioni attualmente in portafoglio, considerando BUY e SELL">0.00 €</span>
+  </div>
+      
+    </div>
+    <div>
+      <div class="price-controls">
+        <select id="marketSelect" class="market-select">
+          <option value="XETRA">XETRA</option>
+          <option value="NASDAQ">NASDAQ</option>
+          <option value="NYSE">NYSE</option>
+          <option value="MILAN">MILAN</option>
+          <option value="LSE">LSE</option>
+        </select>
+        <button id="fetchMarketPrice" class="market-price-btn">Ottieni Prezzo di Mercato</button>
+      </div>
+      <div>
+        <label>Prezzo Aggiornato: 
+          <input type="number" step="0.01" id="currentPrice" placeholder="0.00 €" style="width:100px;">
+        </label>
+        <span id="priceLoading" style="display:none;" class="loading"></span>
+        <span id="priceTimestamp" style="font-size: 0.8em; color: #666; margin-left: 5px;"></span>
+      </div>
+      <div><strong>Valore Teorico:</strong> <span id="theoreticalValue" class="value">0.00 €</span></div>
+      <div><strong>Capital Gain:</strong> <span id="capitalGain" class="value">0.00 €</span> <span id="gainArrow"></span></div>
+      <div><strong>% Variazione:</strong> <span id="percentChange" class="value">0.00 %</span></div>
+    </div>
+  </div>
+  <script>
+    let table;
+    let rows = [];
+    let editingIndex = null;
+    let currentSymbol = '';
+
+	function parseXMLContent(content) {
+	  const parser = new DOMParser();
+	  const xml = parser.parseFromString(content, "application/xml");
+	  if (xml.querySelector("parsererror")) { alert("Errore nel parsing XML"); return; }
+
+	  rows = [];
+	  xml.querySelectorAll("stock").forEach(stock => {
+		const symbol = stock.getAttribute("symbol");
+		stock.querySelectorAll("transaction").forEach(tx => {
+		  let dateVal = tx.querySelector("date")?.textContent || "";
+		  // retrocompatibile: aggiunge ora 00:00 se manca
+		  if (dateVal.length === 10) dateVal += "T00:00";
+		  rows.push([
+			symbol,
+			tx.getAttribute("type") || "",
+			parseFloat(tx.querySelector("shares")?.textContent || 0),
+			parseFloat(tx.querySelector("price")?.textContent || 0),
+			parseFloat(tx.querySelector("fee")?.textContent || 0),
+			parseFloat(tx.querySelector("total")?.textContent || 0),
+			dateVal,
+			tx.querySelector("notes")?.textContent || ""
+		  ]);
+		});
+	  });
+
+	  if (table) table.clear().rows.add(rows).draw();
+	  else table = $('#tradesTable').DataTable({
+		data: rows,
+		columns: [
+		  { title: "Titolo" },
+		  { title: "Tipo" },
+		  { 
+			title: "Azioni",
+			render: data => `<div title="${parseFloat(data).toFixed(6)}">${parseFloat(data).toFixed(6)}</div>`
+		  },
+		  { 
+			title: "Prezzo",
+			render: data => `<div title="${parseFloat(data)}">${parseFloat(data).toFixed(6)}</div>`
+		  },
+		  { 
+			title: "Fee",
+			render: data => `<div title="${parseFloat(data)}">${parseFloat(data).toFixed(6)}</div>`
+		  },
+		  { 
+			title: "Totale",
+			render: data => `<div title="${parseFloat(data)}">${parseFloat(data).toFixed(6)}</div>`
+		  },
+		  { 
+			title: "Data",
+			render: data => {
+			  if(!data) return "";
+			  const dt = new Date(data);
+			  return dt.toLocaleString(); // mostra data + ora leggibile
+			}
+		  },
+		  { 
+			title: "Note",
+			render: data => data ? '<div class="notes-cell" title="' + data + '">' + data + '</div>' : ''
+		  }
+		],
+		destroy: true,
+		responsive: true,
+		order: [[6, 'desc']]
+	  });
+
+	  updateSummary();
+	  updateSymbolsList();
+	  $('#panelSummary').hide();
+	}
+
+    function updateSymbolsList() {
+      const symbols = [...new Set(rows.map(r => r[0]))].sort();
+      const datalist = document.getElementById("symbolsList");
+      datalist.innerHTML = "";
+      symbols.forEach(s => {
+        const option = document.createElement("option");
+        option.value = s;
+        datalist.appendChild(option);
+      });
+    }
+
+	function exportXML() {
+	  let xmlContent = `<portfolio>\n`;
+	  const grouped = {};
+
+	  rows.forEach((row, i) => {
+		const [symbol, type, shares, price, fee, total, date, notes] = row;
+		if (!grouped[symbol]) grouped[symbol] = [];
+		grouped[symbol].push({ id: i + 1, type, shares, price, fee, total, date, notes });
+	  });
+
+	  for (let symbol in grouped) {
+		xmlContent += `  <stock symbol="${symbol}" name="${symbol}">\n`;
+		grouped[symbol].forEach(tx => {
+		  xmlContent += `    <transaction id="${tx.id}" type="${tx.type}">\n`;
+		  xmlContent += `      <shares>${tx.shares}</shares>\n`;
+		  xmlContent += `      <price>${tx.price}</price>\n`;
+		  xmlContent += `      <fee>${tx.fee}</fee>\n`;
+		  xmlContent += `      <total>${tx.total}</total>\n`;
+		  xmlContent += `      <date>${tx.date}</date>\n`;
+		  if (tx.notes) xmlContent += `      <notes><![CDATA[${tx.notes}]]></notes>\n`;
+		  xmlContent += `    </transaction>\n`;
+		});
+		xmlContent += `  </stock>\n`;
+	  }
+
+	  xmlContent += `</portfolio>`;
+	  const blob = new Blob([xmlContent], { type: "application/xml" });
+	  const a = document.createElement("a");
+	  a.href = URL.createObjectURL(blob);
+	  a.download = "trades_updated.xml";
+	  a.click();
+	}
+
+
+    function openModal(edit=false,index=null){
+      document.getElementById("modal").style.display="flex";
+      document.getElementById("modalTitle").textContent = edit?"Modifica Operazione":"Nuova Operazione";
+      editingIndex=index;
+      if(edit && index!==null){
+        const row=rows[index];
+        document.getElementById("symbol").value=row[0];
+        document.getElementById("type").value=row[1];
+        document.getElementById("shares").value=row[2];
+        document.getElementById("price").value=row[3];
+        document.getElementById("fee").value=row[4];
+        document.getElementById("total").value=row[5];
+        document.getElementById("date").value=row[6];
+        document.getElementById("notes").value=row[7] || "";
+      } else {
+        document.querySelectorAll(".modal-content input, .modal-content textarea").forEach(el=>el.value="");
+        document.getElementById("type").value="BUY";
+      }
+      document.getElementById("symbol").focus();
+      updateTotal();
+    }
+
+    function closeModal(){ document.getElementById("modal").style.display="none"; }
+
+    function updateTotal(){
+      const type=document.getElementById("type").value;
+      const shares=parseFloat(document.getElementById("shares").value)||0;
+      const price=parseFloat(document.getElementById("price").value)||0;
+      const fee=parseFloat(document.getElementById("fee").value)||0;
+      const total=type==="SELL"?(shares*price-fee).toFixed(2):(shares*price+fee).toFixed(2);
+      document.getElementById("total").value=total;
+    }
+
+    function updateSummary(){
+      let totalBuy=0,totalSell=0;
+      rows.forEach(row=>{
+        const type=row[1], total=parseFloat(row[5])||0;
+        if(type==="BUY") totalBuy+=total;
+        if(type==="SELL") totalSell+=total;
+      });
+      const balance=totalSell-totalBuy;
+      document.getElementById("totalBuy").textContent=totalBuy.toFixed(2);
+      document.getElementById("totalSell").textContent=totalSell.toFixed(2);
+      const balanceEl=document.getElementById("balance");
+      balanceEl.textContent=balance.toFixed(2);
+      balanceEl.style.color=balance<0?"red":"green";
+    }
+
+    // Funzione per ottenere il prezzo di mercato (simulato)
+    async function fetchMarketPrice(symbol, market) {
+      // In un'implementazione reale, qui chiameresti un'API come:
+      // Alpha Vantage, Yahoo Finance, o un servizio simile
+      
+      // Simuliamo un ritardo di rete
+      $('#priceLoading').show();
+      
+      try {
+        // Simulazione di chiamata API - in produzione sostituire con chiamata reale
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        // Simuliamo prezzi casuali per dimostrazione
+        // In produzione, qui inseriresti la logica per ottenere il prezzo reale
+        const simulatedPrice = (Math.random() * 100 + 50).toFixed(2);
+        
+        $('#currentPrice').val(simulatedPrice);
+        $('#priceTimestamp').text(new Date().toLocaleTimeString());
+        
+        // Aggiorniamo la proiezione con il nuovo prezzo
+        updateProjection();
+        
+      } catch (error) {
+        console.error("Errore nel recupero del prezzo:", error);
+        alert("Impossibile recuperare il prezzo di mercato. Verifica la connessione o il simbolo.");
+      } finally {
+        $('#priceLoading').hide();
+      }
+    }
+
+	function updateProjection() {
+	  const price = parseFloat($('#currentPrice').val()) || 0;
+	  const deltaShares = parseFloat($('#sumDeltaShares').text()) || 0;
+	  const deltaMoney = parseFloat($('#sumDeltaMoney').text().replace(' €', '')) || 0;
+	  const avgNet = parseFloat($('#sumAvgNet').text().replace(' €', '')) || 0;
+
+	  const value = (deltaShares * price).toFixed(2);
+	  const gain = (deltaShares * price - deltaShares * avgNet).toFixed(2); // Capital Gain basato su Prezzo Medio Netto
+	  const percent = deltaShares > 0 ? ((price - avgNet) / avgNet * 100).toFixed(2) : 0; // % Variazione basata su Prezzo Medio Netto
+
+	  $('#theoreticalValue').text(value + ' €');
+	  
+	  $('#capitalGain').text(gain + ' €');
+	  $('#gainArrow').html(gain > 0 ? '⬆️' : gain < 0 ? '⬇️' : '');
+	  $('#capitalGain').css('color', gain > 0 ? 'green' : gain < 0 ? 'red' : 'black');
+
+	  $('#percentChange').text(percent + ' %').css('color', percent > 0 ? 'green' : percent < 0 ? 'red' : 'black');
+	}
+
+
+function updateTitleSummary(selectedRow=null) {
+  if(!table || !selectedRow) { 
+    $('#panelSummary').hide();
+    return; 
+  }
+
+  currentSymbol = selectedRow[0];
+  const dataForSymbol = rows.filter(r => r[0] === currentSymbol);
+
+  let totalBuyShares=0, moneyOut=0, totalSellShares=0, moneyIn=0;
+
+  dataForSymbol.forEach(r=>{
+    const type=r[1], shares=parseFloat(r[2]), total=parseFloat(r[5]);
+    if(type==='BUY'){ totalBuyShares+=shares; moneyOut+=total; }
+    else if(type==='SELL'){ totalSellShares+=shares; moneyIn+=total; }
+  });
+
+  const deltaShares = totalBuyShares - totalSellShares; // azioni attuali
+  const deltaMoney = moneyOut - moneyIn;               // saldo investito
+
+  const avgBuy = totalBuyShares>0 ? (moneyOut/totalBuyShares).toFixed(2) : 0; // PMC
+  const avgNet = deltaShares>0 ? (deltaMoney/deltaShares).toFixed(2) : 0;    // Prezzo medio netto
+
+  // Aggiorna valori riepilogo
+  $('#sumSymbol').text(currentSymbol);
+  $('#sumBuy').text(`${totalBuyShares.toFixed(6)} azioni, Investimento: ${moneyOut.toFixed(2)} €`);
+  $('#sumSell').text(`${totalSellShares.toFixed(6)} azioni, Incasso: ${moneyIn.toFixed(2)} €`);
+  $('#sumDeltaShares').text(deltaShares.toFixed(6));
+  $('#sumDeltaMoney').text(deltaMoney.toFixed(2)+' €');
+  $('#sumAvgBuy').text(avgBuy+' €');
+  $('#sumAvgNet').text(avgNet+' €');
+
+  // Mostra pannello
+  $('#panelSummary').show();
+
+  // Reset proiezione
+  $('#currentPrice').val('');
+  $('#theoreticalValue').text('0.00 €').css('color','black');
+  $('#capitalGain').text('0.00 €');
+  $('#gainArrow').html('');
+  $('#percentChange').text('0.00 %').css('color','black');
+  $('#priceTimestamp').text('');
+
+  // Aggiornamento in tempo reale proiezione
+  $('#currentPrice').off('input').on('input', updateProjection);
+}
+
+
+    $(document).ready(function(){
+      $("#importBtn").on("click",()=>$("#fileInput").click());
+      $("#fileInput").on("change",(event)=>{
+        const file=event.target.files[0]; if(!file) return;
+        const reader=new FileReader();
+        reader.onload=(e)=>parseXMLContent(e.target.result);
+        reader.readAsText(file,"UTF-8");
+      });
+
+      $("#addBtn").on("click",()=>openModal(false));
+      $("#deleteBtn").on("click",()=>{
+        const selected=table.row('.selected'); 
+        if(!selected.data()){alert("Seleziona una riga da eliminare!"); return;}
+        if(!confirm("Sei sicuro di voler eliminare questa operazione?")) return;
+        rows.splice(selected.index(),1); selected.remove().draw(false); updateSummary(); updateSymbolsList(); $('#panelSummary').hide();
+      });
+      $("#exportBtn").on("click",()=>exportXML());
+
+	// Salvataggio operazione con datetime-local
+	$("#saveBtn").on("click", () => {
+	  const symbol = $("#symbol").val().trim();
+	  const type = $("#type").val();
+	  const shares = parseFloat($("#shares").val());
+	  const price = parseFloat($("#price").val());
+	  const fee = parseFloat($("#fee").val()) || 0;
+	  const total = type === "SELL" ? (shares * price - fee) : (shares * price + fee);
+
+	  let date = $("#date").val();
+	  if(date.length === 10) date += "T00:00"; // retrocompatibilità vecchie date
+
+	  const notes = $("#notes").val();
+
+	  if(!symbol || !type || !shares || !price || !date) { alert("Compila tutti i campi obbligatori!"); return; }
+	  if(shares <= 0 || price <= 0 || fee < 0) { alert("Valori numerici non validi!"); return; }
+
+	  const newRow = [symbol, type, shares, price, fee, total, date, notes];
+
+	  if(editingIndex !== null) {
+		rows[editingIndex] = newRow;
+		table.row(editingIndex).data(newRow).draw(false);
+	  } else {
+		rows.push(newRow);
+		table.row.add(newRow).draw(false);
+	  }
+
+	  updateSummary();
+	  updateSymbolsList();
+	  updateTitleSummary(newRow);
+	  closeModal();
+	});
+
+      $("#cancelBtn").on("click",closeModal);
+      $("#shares,#price,#fee,#type").on("input change",updateTotal);
+
+      // Selezione e riepilogo
+      $('#tradesTable tbody').on('click','tr',function(){
+        $(this).toggleClass('selected').siblings().removeClass('selected');
+        const selectedData = table.row(this).data();
+        
+        if (selectedData) {
+          const symbol = selectedData[0]; // colonna "Titolo"
+          // aggiorna campo filtro
+          $("#filterSymbol").val(symbol);
+          // applica filtro come se lo avessi digitato
+          table.column(0).search(symbol).draw();
+          // aggiorna riepilogo
+          updateTitleSummary(selectedData);
+        }
+      });
+
+
+      // Doppio click apre modal di modifica
+      $('#tradesTable tbody').on('dblclick','tr',function(){
+        const index = table.row(this).index();
+        openModal(true,index);
+      });
+
+      // Filtri Titolo / Tipo
+      $("#filterSymbol").on("input",function(){ table.column(0).search(this.value).draw(); });
+      $("#filterType").on("change",function(){ table.column(1).search(this.value).draw(); });
+
+	// Filtro date + ora
+	$.fn.dataTable.ext.search.push(function(settings,data){
+	  const min = $('#filterDateFrom').val();
+	  const max = $('#filterDateTo').val();
+	  const dateVal = data[6];
+	  if(!dateVal) return true;
+	  if(min && dateVal < min) return false;
+	  if(max && dateVal > max) return false;
+	  return true;
+	});
+	$('#filterDateFrom,#filterDateTo').on("change",()=>table.draw());
+
+      // Reset filtri
+      $("#resetFilters").on("click",function(){
+        $("#filterSymbol").val(''); $("#filterType").val('');
+        $("#filterDateFrom").val(''); $("#filterDateTo").val('');
+        table.search('').columns().search('').draw();
+        $('#panelSummary').hide();
+      });
+
+      // Ottieni prezzo di mercato
+      $("#fetchMarketPrice").on("click",function(){
+        if (!currentSymbol) {
+          alert("Seleziona prima un titolo dalla tabella");
+          return;
+        }
+        const market = $("#marketSelect").val();
+        fetchMarketPrice(currentSymbol, market);
+      });
+
+      window.onclick=function(event){ if(event.target==document.getElementById("modal")) closeModal(); };
+    });
+  </script>
+</body>
+</html>
