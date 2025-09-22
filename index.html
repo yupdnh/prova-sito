@@ -70,6 +70,8 @@
     <button id="deleteBtn">❌ Elimina</button>
     <button id="exportBtn">💾 Esporta XML</button>
 	<button id="uploadDriveBtn">☁️ Carica XML su Drive</button>
+	<button id="importDriveBtn">☁️ Importa XML da Drive</button>
+
 
   </div>
 
@@ -645,11 +647,60 @@ document.getElementById("uploadDriveBtn").addEventListener("click", () => {
 window.onload = () => {
   gisInit();
 };
+
+
+// Funzione per import da Drive
+async function importXMLFromDrive(accessToken) {
+  try {
+    // Chiedi all'utente il nome del file
+    const fileName = prompt("Inserisci il nome del file XML su Drive (es: trades.xml):", "trades.xml");
+    if(!fileName) return;
+
+    // Cerca il file su Drive
+    const searchRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=name='${encodeURIComponent(fileName)}' and trashed=false&fields=files(id,name)`, {
+      headers: { Authorization: "Bearer " + accessToken }
+    });
+    const searchData = await searchRes.json();
+    if(!searchData.files || searchData.files.length===0) { alert("File non trovato su Drive"); return; }
+
+    const fileId = searchData.files[0].id;
+    const fileRes = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
+      headers: { Authorization: "Bearer " + accessToken }
+    });
+    const content = await fileRes.text();
+    parseXMLContent(content);
+    alert("✅ Import da Drive completato!");
+  } catch(err){
+    console.error(err);
+    alert("❌ Errore import da Drive");
+  }
+}
+
+// Inizializza token client GIS (se non già fatto)
+let importTokenClient;
+function initImportTokenClient() {
+  importTokenClient = google.accounts.oauth2.initTokenClient({
+    client_id: CLIENT_ID,
+    scope: SCOPES,
+    callback: async (tokenResponse) => {
+      if(tokenResponse.error){ alert("Errore ottenendo token"); return; }
+      await importXMLFromDrive(tokenResponse.access_token);
+    }
+  });
+}
+
+// Pulsante import
+document.getElementById("importDriveBtn").addEventListener("click", () => {
+  if(!importTokenClient) initImportTokenClient();
+  importTokenClient.requestAccessToken({ prompt: 'consent' });
+});
+
 </script>
 
 
 </body>
 
 </html>
+
 
 
