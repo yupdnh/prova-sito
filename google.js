@@ -49,6 +49,10 @@ async function uploadXMLToDrive(accessToken) {
     try {
         if (!rows || rows.length === 0) { alert("Nessun dato da caricare"); return; }
 
+        // Chiedi all'utente il nome del file
+        let fileName = prompt("Inserisci il nome del file XML da creare su Drive:", "trades_uploaded.xml");
+        if (!fileName) return;
+
         let xmlContent = `<portfolio>\n`;
         const grouped = {};
         rows.forEach((row, i) => {
@@ -73,7 +77,7 @@ async function uploadXMLToDrive(accessToken) {
         xmlContent += `</portfolio>`;
 
         const file = new Blob([xmlContent], { type: "application/xml" });
-        const metadata = { name: "trades_uploaded.xml", mimeType: "application/xml" };
+        const metadata = { name: fileName, mimeType: "application/xml" };
         const form = new FormData();
         form.append("metadata", new Blob([JSON.stringify(metadata)], { type: "application/json" }));
         form.append("file", file);
@@ -93,6 +97,7 @@ async function uploadXMLToDrive(accessToken) {
         clearToken(); // forza login al prossimo tentativo
     }
 }
+
 
 // ======= Import XML da Drive =======
 async function importXMLFromDrive(accessToken) {
