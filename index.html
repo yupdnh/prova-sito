@@ -7,8 +7,8 @@
   <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
   <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
 
-  <script src="https://apis.google.com/js/api.js" async defer></script>
-	
+  
+	<script src="https://accounts.google.com/gsi/client" async defer></script>
 
   <style>
     body { font-family: Arial, sans-serif; margin: 20px; }
@@ -548,111 +548,108 @@ function updateTitleSummary(selectedRow=null) {
     });
 
   </script>
+
 <script>
-	const CLIENT_ID = "56253726954-09m34mc6cck2pq2k4cr2k98l2et66l8d.apps.googleusercontent.com";
-	const SCOPES = "https://www.googleapis.com/auth/drive.file";
-	
-	// Inizializza GAPI
-	function gapiInit() {
-	  gapi.load("client:auth2", () => {
-	    gapi.client.init({
-	      clientId: CLIENT_ID,
-	      scope: SCOPES,
-	      discoveryDocs: ["https://www.googleapis.com/discovery/v1/apis/drive/v3/rest"]
-	    }).then(() => {
-	      console.log("✅ GAPI inizializzato");
-	    }).catch(err => {
-	      console.error("❌ Errore init GAPI:", err);
-	    });
-	  });
-	}
-	
-	// Chiama gapiInit quando la libreria è pronta
-	window.addEventListener("load", () => {
-	  if (typeof gapi !== "undefined") {
-	    gapiInit();
-	  } else {
-	    console.error("❌ gapi non caricato");
-	  }
-	});
-	
-	// Autenticazione utente
-	async function authenticate() {
-	  const GoogleAuth = gapi.auth2.getAuthInstance();
-	  if (!GoogleAuth) throw new Error("Auth non inizializzato. Attendi che gapiInit finisca.");
-	  
-	  if (!GoogleAuth.isSignedIn.get()) {
-	    await GoogleAuth.signIn();
-	  }
-	  
-	  return GoogleAuth.currentUser.get().getAuthResponse().access_token;
-	}
-	
-	// Upload file XML su Google Drive
-	async function uploadXMLToDrive(xmlContent) {
-	  const accessToken = await authenticate();
-	  const file = new Blob([xmlContent], { type: "application/xml" });
-	
-	  const metadata = {
-	    name: "trades_uploaded.xml",
-	    mimeType: "application/xml"
-	  };
-	
-	  const form = new FormData();
-	  form.append("metadata", new Blob([JSON.stringify(metadata)], { type: "application/json" }));
-	  form.append("file", file);
-	
-	  const res = await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart", {
-	    method: "POST",
-	    headers: new Headers({ Authorization: "Bearer " + accessToken }),
-	    body: form
-	  });
-	
-	  if (!res.ok) {
-	    const errText = await res.text();
-	    throw new Error("Upload fallito: " + errText);
-	  }
-	
-	  return res.json();
-	}
-	
-	// Pulsante per caricare su Drive
-	$("#uploadDriveBtn").on("click", async () => {
-	  try {
-	    // Genera XML (puoi riutilizzare la tua funzione exportXML)
-	    let xmlContent = `<portfolio>\n`;
-	    const grouped = {};
-	    rows.forEach((row, i) => {
-	      const [symbol, type, shares, price, fee, total, date, notes] = row;
-	      if (!grouped[symbol]) grouped[symbol] = [];
-	      grouped[symbol].push({ id: i + 1, type, shares, price, fee, total, date, notes });
-	    });
-	    for (let symbol in grouped) {
-	      xmlContent += `  <stock symbol="${symbol}" name="${symbol}">\n`;
-	      grouped[symbol].forEach(tx => {
-	        xmlContent += `    <transaction id="${tx.id}" type="${tx.type}">\n`;
-	        xmlContent += `      <shares>${tx.shares}</shares>\n`;
-	        xmlContent += `      <price>${tx.price}</price>\n`;
-	        xmlContent += `      <fee>${tx.fee}</fee>\n`;
-	        xmlContent += `      <total>${tx.total}</total>\n`;
-	        xmlContent += `      <date>${tx.date}</date>\n`;
-	        if (tx.notes) xmlContent += `      <notes><![CDATA[${tx.notes}]]></notes>\n`;
-	        xmlContent += `    </transaction>\n`;
-	      });
-	      xmlContent += `  </stock>\n`;
-	    }
-	    xmlContent += `</portfolio>`;
-	
-	    const result = await uploadXMLToDrive(xmlContent);
-	    alert("✅ File caricato su Drive con ID: " + result.id);
-	  } catch (err) {
-	    console.error("❌ Errore upload:", err);
-	    alert("❌ Errore durante il caricamento: " + err.message);
-	  }
-	});
+const CLIENT_ID = "56253726954-09m34mc6cck2pq2k4cr2k98l2et66l8d.apps.googleusercontent.com";
+const SCOPES = "https://www.googleapis.com/auth/drive.file";
+
+let tokenClient;
+
+// Inizializza GIS
+function gisInit() {
+  tokenClient = google.accounts.oauth2.initTokenClient({
+    client_id: CLIENT_ID,
+    scope: SCOPES,
+    callback: async (tokenResponse) => {
+      if (tokenResponse.error) {
+        console.error("Errore token:", tokenResponse);
+        alert("Errore ottenendo il token OAuth");
+        return;
+      }
+      console.log("Token ottenuto:", tokenResponse.access_token);
+      // Carica il file su Drive
+      await uploadXMLToDrive(tokenResponse.access_token);
+    }
+  });
+}
+
+// Richiede il token interattivo
+function requestToken() {
+  tokenClient.requestAccessToken({ prompt: 'consent' });
+}
+
+// Upload XML su Drive usando il token GIS
+async function uploadXMLToDrive(accessToken) {
+  try {
+    // Prepara il contenuto XML
+    let xmlContent = `<portfolio>\n`;
+    const grouped = {};
+    rows.forEach((row, i) => {
+      const [symbol, type, shares, price, fee, total, date, notes] = row;
+      if (!grouped[symbol]) grouped[symbol] = [];
+      grouped[symbol].push({ id: i + 1, type, shares, price, fee, total, date, notes });
+    });
+    for (let symbol in grouped) {
+      xmlContent += `  <stock symbol="${symbol}" name="${symbol}">\n`;
+      grouped[symbol].forEach(tx => {
+        xmlContent += `    <transaction id="${tx.id}" type="${tx.type}">\n`;
+        xmlContent += `      <shares>${tx.shares}</shares>\n`;
+        xmlContent += `      <price>${tx.price}</price>\n`;
+        xmlContent += `      <fee>${tx.fee}</fee>\n`;
+        xmlContent += `      <total>${tx.total}</total>\n`;
+        xmlContent += `      <date>${tx.date}</date>\n`;
+        if (tx.notes) xmlContent += `      <notes><![CDATA[${tx.notes}]]></notes>\n`;
+        xmlContent += `    </transaction>\n`;
+      });
+      xmlContent += `  </stock>\n`;
+    }
+    xmlContent += `</portfolio>`;
+
+    // Upload con fetch
+    const file = new Blob([xmlContent], { type: "application/xml" });
+    const metadata = {
+      name: "trades_uploaded.xml",
+      mimeType: "application/xml"
+    };
+
+    const form = new FormData();
+    form.append("metadata", new Blob([JSON.stringify(metadata)], { type: "application/json" }));
+    form.append("file", file);
+
+    const res = await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart", {
+      method: "POST",
+      headers: { Authorization: "Bearer " + accessToken },
+      body: form
+    });
+
+    const result = await res.json();
+    console.log("File caricato:", result);
+    alert("✅ File caricato su Drive con ID: " + result.id);
+
+  } catch (err) {
+    console.error("Errore upload:", err);
+    alert("❌ Errore durante il caricamento su Drive");
+  }
+}
+
+// Pulsante per upload
+document.getElementById("uploadDriveBtn").addEventListener("click", () => {
+  if (rows.length === 0) {
+    alert("Nessun dato da caricare");
+    return;
+  }
+  requestToken();
+});
+
+// Inizializza GIS al caricamento della pagina
+window.onload = () => {
+  gisInit();
+};
 </script>
+
 
 </body>
 
 </html>
+
 
