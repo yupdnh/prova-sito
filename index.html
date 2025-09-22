@@ -9,6 +9,8 @@
 
   
 	<script src="https://accounts.google.com/gsi/client" async defer></script>
+	<script type="text/javascript" src="https://apis.google.com/js/api.js"></script>
+
 
   <style>
     body { font-family: Arial, sans-serif; margin: 20px; }
@@ -689,18 +691,71 @@ function initImportTokenClient() {
   });
 }
 
+
+let developerKey = "AIzaSyC0DrP7SQOHriitd0jRCBKoIlIDV-b7nqI"; // devi creare un progetto su Google Cloud e ottenere la API Key
+let pickerApiLoaded = false;
+
+function loadPickerApi() {
+  gapi.load('picker', {'callback': onPickerApiLoad});
+}
+
+function onPickerApiLoad() {
+  pickerApiLoaded = true;
+}
+
+function openDrivePicker(accessToken) {
+  if (!pickerApiLoaded) loadPickerApi();
+
+  const view = new google.picker.DocsView(google.picker.ViewId.DOCS)
+      .setMimeTypes("application/xml")
+      .setMode(google.picker.DocsViewMode.LIST);
+
+  const picker = new google.picker.PickerBuilder()
+      .enableFeature(google.picker.Feature.NAV_HIDDEN)
+      .enableFeature(google.picker.Feature.MULTISELECT_DISABLED)
+      .setOAuthToken(accessToken)
+      .setDeveloperKey(developerKey)
+      .addView(view)
+      .setCallback(pickerCallback)
+      .build();
+  picker.setVisible(true);
+}
+
+function pickerCallback(data) {
+  if (data.action === google.picker.Action.PICKED) {
+    const fileId = data.docs[0].id;
+    fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
+      headers: { Authorization: "Bearer " + tokenClient.access_token }
+    })
+    .then(res => res.text())
+    .then(content => {
+      parseXMLContent(content);
+      alert("✅ Import da Drive completato!");
+    });
+  }
+}
+	
 // Pulsante import
 document.getElementById("importDriveBtn").addEventListener("click", () => {
   if(!importTokenClient) initImportTokenClient();
-  importTokenClient.requestAccessToken({ prompt: 'consent' });
+  importTokenClient.requestAccessToken({ prompt: 'consent', callback: (tokenResponse) => {
+      if(tokenResponse.error){ alert("Errore ottenendo token"); return; }
+      openDrivePicker(tokenResponse.access_token);
+  }});
 });
 
+
+
+
+
+	
 </script>
 
 
 </body>
 
 </html>
+
 
 
 
