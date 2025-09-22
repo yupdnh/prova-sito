@@ -686,7 +686,8 @@ function initImportTokenClient() {
     scope: SCOPES,
     callback: async (tokenResponse) => {
       if(tokenResponse.error){ alert("Errore ottenendo token"); return; }
-      await importXMLFromDrive(tokenResponse.access_token);
+      //await importXMLFromDrive(tokenResponse.access_token);
+		openDrivePicker(accessToken);
     }
   });
 }
@@ -755,6 +756,7 @@ document.getElementById("importDriveBtn").addEventListener("click", () => {
 </body>
 
 </html>
+
 
 
 
