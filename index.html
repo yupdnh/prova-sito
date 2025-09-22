@@ -687,7 +687,7 @@ function initImportTokenClient() {
     callback: async (tokenResponse) => {
       if(tokenResponse.error){ alert("Errore ottenendo token"); return; }
       //await importXMLFromDrive(tokenResponse.access_token);
-		openDrivePicker(accessToken);
+		openDrivePicker(tokenResponse.access_token);
     }
   });
 }
@@ -756,6 +756,7 @@ document.getElementById("importDriveBtn").addEventListener("click", () => {
 </body>
 
 </html>
+
 
 
 
