@@ -179,75 +179,96 @@
     let editingIndex = null;
     let currentSymbol = '';
 
-	function parseXMLContent(content) {
-	  const parser = new DOMParser();
-	  const xml = parser.parseFromString(content, "application/xml");
-	  if (xml.querySelector("parsererror")) { alert("Errore nel parsing XML"); return; }
+function parseXMLContent(content) {
+  console.log("📄 Anteprima XML ricevuto:", content.substring(0, 300)); // debug
 
-	  rows = [];
-	  xml.querySelectorAll("stock").forEach(stock => {
-		const symbol = stock.getAttribute("symbol");
-		stock.querySelectorAll("transaction").forEach(tx => {
-		  let dateVal = tx.querySelector("date")?.textContent || "";
-		  // retrocompatibile: aggiunge ora 00:00 se manca
-		  if (dateVal.length === 10) dateVal += "T00:00";
-		  rows.push([
-			symbol,
-			tx.getAttribute("type") || "",
-			parseFloat(tx.querySelector("shares")?.textContent || 0),
-			parseFloat(tx.querySelector("price")?.textContent || 0),
-			parseFloat(tx.querySelector("fee")?.textContent || 0),
-			parseFloat(tx.querySelector("total")?.textContent || 0),
-			dateVal,
-			tx.querySelector("notes")?.textContent || ""
-		  ]);
-		});
-	  });
+  const parser = new DOMParser();
+  const xml = parser.parseFromString(content, "application/xml");
 
-	  if (table) table.clear().rows.add(rows).draw();
-	  else table = $('#tradesTable').DataTable({
-		data: rows,
-		columns: [
-		  { title: "Titolo" },
-		  { title: "Tipo" },
-		  { 
-			title: "Azioni",
-			render: data => `<div title="${parseFloat(data).toFixed(6)}">${parseFloat(data).toFixed(6)}</div>`
-		  },
-		  { 
-			title: "Prezzo",
-			render: data => `<div title="${parseFloat(data)}">${parseFloat(data).toFixed(6)}</div>`
-		  },
-		  { 
-			title: "Fee",
-			render: data => `<div title="${parseFloat(data)}">${parseFloat(data).toFixed(6)}</div>`
-		  },
-		  { 
-			title: "Totale",
-			render: data => `<div title="${parseFloat(data)}">${parseFloat(data).toFixed(6)}</div>`
-		  },
-		  { 
-			title: "Data",
-			render: data => {
-			  if(!data) return "";
-			  const dt = new Date(data);
-			  return dt.toLocaleString(); // mostra data + ora leggibile
-			}
-		  },
-		  { 
-			title: "Note",
-			render: data => data ? '<div class="notes-cell" title="' + data + '">' + data + '</div>' : ''
-		  }
-		],
-		destroy: true,
-		responsive: true,
-		order: [[6, 'desc']]
-	  });
+  // Verifica se c'è un errore di parsing
+  const parserError = xml.querySelector("parsererror");
+  if (parserError) {
+    console.error("❌ Errore nel parsing XML:", parserError.textContent);
+    alert("Errore nel parsing XML:\n" + parserError.textContent);
+    return;
+  }
 
-	  updateSummary();
-	  updateSymbolsList();
-	  $('#panelSummary').hide();
-	}
+  rows = [];
+  xml.querySelectorAll("stock").forEach(stock => {
+    const symbol = stock.getAttribute("symbol") || "";
+
+    stock.querySelectorAll("transaction").forEach(tx => {
+      let dateVal = tx.querySelector("date")?.textContent?.trim() || "";
+      // retrocompatibilità: se manca ora → aggiungo T00:00
+      if (dateVal && dateVal.length === 10) dateVal += "T00:00";
+
+      // parsing sicuro dei numeri
+      const safeParse = (el) => {
+        const val = el?.textContent?.trim();
+        return val && !isNaN(val) ? parseFloat(val) : 0;
+      };
+
+      rows.push([
+        symbol,
+        tx.getAttribute("type") || "",
+        safeParse(tx.querySelector("shares")),
+        safeParse(tx.querySelector("price")),
+        safeParse(tx.querySelector("fee")),
+        safeParse(tx.querySelector("total")),
+        dateVal,
+        tx.querySelector("notes")?.textContent?.trim() || ""
+      ]);
+    });
+  });
+
+  if (table) {
+    table.clear().rows.add(rows).draw();
+  } else {
+    table = $('#tradesTable').DataTable({
+      data: rows,
+      columns: [
+        { title: "Titolo" },
+        { title: "Tipo" },
+        { 
+          title: "Azioni",
+          render: data => `<div title="${data.toFixed(6)}">${data.toFixed(6)}</div>`
+        },
+        { 
+          title: "Prezzo",
+          render: data => `<div title="${data.toFixed(6)}">${data.toFixed(6)}</div>`
+        },
+        { 
+          title: "Fee",
+          render: data => `<div title="${data.toFixed(6)}">${data.toFixed(6)}</div>`
+        },
+        { 
+          title: "Totale",
+          render: data => `<div title="${data.toFixed(6)}">${data.toFixed(6)}</div>`
+        },
+        { 
+          title: "Data",
+          render: data => {
+            if (!data) return "";
+            const dt = new Date(data);
+            return isNaN(dt) ? data : dt.toLocaleString();
+          }
+        },
+        { 
+          title: "Note",
+          render: data => data ? `<div class="notes-cell" title="${data}">${data}</div>` : ""
+        }
+      ],
+      destroy: true,
+      responsive: true,
+      order: [[6, "desc"]]
+    });
+  }
+
+  updateSummary();
+  updateSymbolsList();
+  $('#panelSummary').hide();
+}
+
 
     function updateSymbolsList() {
       const symbols = [...new Set(rows.map(r => r[0]))].sort();
@@ -759,6 +780,7 @@ document.getElementById("importDriveBtn").addEventListener("click", () => {
 </body>
 
 </html>
+
 
 
 
