@@ -200,42 +200,35 @@ function mapSymbolToMarket(symbol, market) {
 
 // Funzione per ottenere il prezzo di mercato (simulato)
 async function fetchMarketPrice(symbol, market) {
+//const proxyUrl = `https://yahoo-finance-api.vercel.app/${symbol}`;
+
   $('#priceLoading').show();
   $('#priceTimestamp').text('');
 
   try {
-    // Mappa i simboli in base al mercato selezionato
     symbol = mapSymbolToMarket(symbol, market);
-	console.log("🔎 Richiesta prezzo per:", symbol, "mercato:", market);
 
-    // Usa un proxy per bypassare le restrizioni CORS di Yahoo Finance
-    const proxy = "https://api.allorigins.win/raw?url=";
-    const yahooUrl = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(symbol)}`;
-
-    const response = await fetch(proxy + encodeURIComponent(yahooUrl));
+    //  proxy gratuito (funziona anche da browser)
+    const url = `https://yahoo-finance-api.vercel.app/${symbol}`;
+    const response = await fetch(url);
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
 
-    const result = data?.quoteResponse?.result?.[0];
-    if (!result) throw new Error("Nessun risultato per il simbolo richiesto.");
-
-    const price = result.regularMarketPrice;
-    const currency = result.currency || "€";
-    const exchange = result.fullExchangeName || market;
-
-    if (!price) throw new Error("Prezzo non disponibile.");
+    const price = data?.regularMarketPrice;
+    if (!price) throw new Error("Prezzo non disponibile");
 
     $('#currentPrice').val(price.toFixed(2));
-    $('#priceTimestamp').text(`${exchange} — ${new Date().toLocaleTimeString()}`);
+    $('#priceTimestamp').text(new Date().toLocaleTimeString());
     updateProjection();
 
   } catch (error) {
     console.error("❌ Errore nel recupero del prezzo:", error);
-    alert("Impossibile ottenere il prezzo reale. Verifica il simbolo o la connessione.");
+    alert("Impossibile ottenere il prezzo di mercato reale. Verifica il simbolo o la connessione.");
   } finally {
     $('#priceLoading').hide();
   }
 }
+
 
 
 	function updateProjection() {
