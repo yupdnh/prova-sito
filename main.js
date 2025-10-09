@@ -206,6 +206,7 @@ async function fetchMarketPrice(symbol, market) {
   try {
     // Mappa i simboli in base al mercato selezionato
     symbol = mapSymbolToMarket(symbol, market);
+	console.log("🔎 Richiesta prezzo per:", symbol, "mercato:", market);
 
     // Usa un proxy per bypassare le restrizioni CORS di Yahoo Finance
     const proxy = "https://api.allorigins.win/raw?url=";
