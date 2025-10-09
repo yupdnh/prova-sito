@@ -188,35 +188,54 @@ function parseXMLContent(content) {
       balanceEl.style.color=balance<0?"red":"green";
     }
 
-    // Funzione per ottenere il prezzo di mercato (simulato)
-    async function fetchMarketPrice(symbol, market) {
-      // In un'implementazione reale, qui chiameresti un'API come:
-      // Alpha Vantage, Yahoo Finance, o un servizio simile
-      
-      // Simuliamo un ritardo di rete
-      $('#priceLoading').show();
-      
-      try {
-        // Simulazione di chiamata API - in produzione sostituire con chiamata reale
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        
-        // Simuliamo prezzi casuali per dimostrazione
-        // In produzione, qui inseriresti la logica per ottenere il prezzo reale
-        const simulatedPrice = (Math.random() * 100 + 50).toFixed(2);
-        
-        $('#currentPrice').val(simulatedPrice);
-        $('#priceTimestamp').text(new Date().toLocaleTimeString());
-        
-        // Aggiorniamo la proiezione con il nuovo prezzo
-        updateProjection();
-        
-      } catch (error) {
-        console.error("Errore nel recupero del prezzo:", error);
-        alert("Impossibile recuperare il prezzo di mercato. Verifica la connessione o il simbolo.");
-      } finally {
-        $('#priceLoading').hide();
-      }
-    }
+function mapSymbolToMarket(symbol, market) {
+  if (!symbol) return symbol;
+  switch (market) {
+    case "MILAN": return symbol.endsWith(".MI") ? symbol : `${symbol}.MI`;
+    case "XETRA": return symbol.endsWith(".DE") ? symbol : `${symbol}.DE`;
+    case "LSE":   return symbol.endsWith(".L")  ? symbol : `${symbol}.L`;
+    default:      return symbol; // NASDAQ, NYSE ecc.
+  }
+}
+
+// Funzione per ottenere il prezzo di mercato (simulato)
+async function fetchMarketPrice(symbol, market) {
+  $('#priceLoading').show();
+  $('#priceTimestamp').text('');
+
+  try {
+    // Mappa i simboli in base al mercato selezionato
+    symbol = mapSymbolToMarket(symbol, market);
+
+    // Usa un proxy per bypassare le restrizioni CORS di Yahoo Finance
+    const proxy = "https://api.allorigins.win/raw?url=";
+    const yahooUrl = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(symbol)}`;
+
+    const response = await fetch(proxy + encodeURIComponent(yahooUrl));
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const data = await response.json();
+
+    const result = data?.quoteResponse?.result?.[0];
+    if (!result) throw new Error("Nessun risultato per il simbolo richiesto.");
+
+    const price = result.regularMarketPrice;
+    const currency = result.currency || "€";
+    const exchange = result.fullExchangeName || market;
+
+    if (!price) throw new Error("Prezzo non disponibile.");
+
+    $('#currentPrice').val(price.toFixed(2));
+    $('#priceTimestamp').text(`${exchange} — ${new Date().toLocaleTimeString()}`);
+    updateProjection();
+
+  } catch (error) {
+    console.error("❌ Errore nel recupero del prezzo:", error);
+    alert("Impossibile ottenere il prezzo reale. Verifica il simbolo o la connessione.");
+  } finally {
+    $('#priceLoading').hide();
+  }
+}
+
 
 	function updateProjection() {
 	  const price = parseFloat($('#currentPrice').val()) || 0;
