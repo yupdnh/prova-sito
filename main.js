@@ -198,8 +198,7 @@ function mapSymbolToMarket(symbol, market) {
   }
 }
 
-// Funzione per ottenere il prezzo di mercato (simulato)
-// Funzione per ottenere il prezzo di mercato (compatibile con GitHub Pages)
+// Funzione per ottenere il prezzo di mercato usando AllOrigins (compatibile GitHub Pages)
 async function fetchMarketPrice(symbol, market) {
   $('#priceLoading').show();
   $('#priceTimestamp').text('');
@@ -208,13 +207,18 @@ async function fetchMarketPrice(symbol, market) {
     // Aggiunge il suffisso corretto in base al mercato scelto
     symbol = mapSymbolToMarket(symbol, market);
 
-    //  Proxy CORS pubblico che inoltra la richiesta a Yahoo Finance
-    const url = `https://corsproxy.io/?https://query2.finance.yahoo.com/v8/finance/chart/${symbol}?interval=1d`;
+    // URL Yahoo Finance
+    const yahooUrl = `https://query2.finance.yahoo.com/v8/finance/chart/${symbol}?interval=1d`;
+
+    // AllOrigins proxy
+    const url = `https://api.allorigins.win/get?url=${encodeURIComponent(yahooUrl)}`;
 
     const response = await fetch(url);
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
-    const data = await response.json();
+    const textData = await response.json();
+    const data = JSON.parse(textData.contents);
+
     const price = data?.chart?.result?.[0]?.meta?.regularMarketPrice;
 
     if (!price) throw new Error("Prezzo non disponibile per questo simbolo.");
@@ -234,6 +238,7 @@ async function fetchMarketPrice(symbol, market) {
     $('#priceLoading').hide();
   }
 }
+
 
 
 
