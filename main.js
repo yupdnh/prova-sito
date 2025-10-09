@@ -209,7 +209,7 @@ async function fetchMarketPrice(symbol, market) {
     symbol = mapSymbolToMarket(symbol, market);
 
     //  proxy gratuito (funziona anche da browser)
-    const url = `https://yahoo-finance-api.vercel.app/${symbol}`;
+    const url = `https://yahoo-finance-api.vercel.app/api/${symbol}`;
     const response = await fetch(url);
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
