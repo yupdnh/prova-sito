@@ -199,35 +199,42 @@ function mapSymbolToMarket(symbol, market) {
 }
 
 // Funzione per ottenere il prezzo di mercato (simulato)
+// Funzione per ottenere il prezzo di mercato (compatibile con GitHub Pages)
 async function fetchMarketPrice(symbol, market) {
-//const proxyUrl = `https://yahoo-finance-api.vercel.app/${symbol}`;
-
   $('#priceLoading').show();
   $('#priceTimestamp').text('');
 
   try {
+    // Aggiunge il suffisso corretto in base al mercato scelto
     symbol = mapSymbolToMarket(symbol, market);
 
-    //  proxy gratuito (funziona anche da browser)
-    const url = `https://yahoo-finance-api.vercel.app/api/${symbol}`;
+    //  Proxy CORS pubblico che inoltra la richiesta a Yahoo Finance
+    const url = `https://corsproxy.io/?https://query2.finance.yahoo.com/v8/finance/chart/${symbol}?interval=1d`;
+
     const response = await fetch(url);
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
     const data = await response.json();
+    const price = data?.chart?.result?.[0]?.meta?.regularMarketPrice;
 
-    const price = data?.regularMarketPrice;
-    if (!price) throw new Error("Prezzo non disponibile");
+    if (!price) throw new Error("Prezzo non disponibile per questo simbolo.");
 
+    // Aggiorna UI
     $('#currentPrice').val(price.toFixed(2));
     $('#priceTimestamp').text(new Date().toLocaleTimeString());
     updateProjection();
 
   } catch (error) {
     console.error("❌ Errore nel recupero del prezzo:", error);
+    $('#priceTimestamp')
+      .text("⚠️ Prezzo non disponibile")
+      .css('color', 'red');
     alert("Impossibile ottenere il prezzo di mercato reale. Verifica il simbolo o la connessione.");
   } finally {
     $('#priceLoading').hide();
   }
 }
+
 
 
 
